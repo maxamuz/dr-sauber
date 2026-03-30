@@ -1,0 +1,151 @@
+<?php
+
+/**
+ * implements hook_permission()
+ */
+function ytarget_permission() {
+  return array(
+    'ytarget set data' => array(
+      'title' => t('Use ytarget'),
+      'description' => t('User can set id and use target id`s'),
+    ),
+  );
+}
+
+/**
+ * implements hook_menu()
+ */
+function ytarget_menu() {
+  $items['admin/config/search/ytarget'] = array(
+    'title' => 'Yandex.metrika targeting',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ytarget_main_form'),
+    'access arguments' => array('ytarget set data'),
+  );
+  $items['admin/config/search/ytarget/%node/edit'] = array(
+    'title' => 'Yandex.metrika target goal editor',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ytarget_edit_form', 4),
+    'access arguments' => array('ytarget set data'),
+  );
+  return $items;
+}
+
+function ytarget_main_form() {
+  $form = array();
+  $id = variable_get('ytarget_id', '');
+
+  $form['ytarget_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Metrika counter ID'),
+    '#required' => TRUE,
+    '#default_value' => $id
+  );
+  $form['ytarget_dev'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Debug'),
+    '#default_value' => variable_get('ytarget_dev', NULL)
+  );
+  if (!empty($id)) {
+    $query = db_select('webform', 'w');
+    $query->join('node', 'n', 'w.nid = n.nid');
+    $query->fields('n', array('nid', 'title'));
+    $nodes = $query->execute()->fetchAllAssoc('nid');
+    $form['table'] = array(
+      '#theme' => 'table',
+      '#header' => array(
+        t('Form title'),
+        t('Target ID'),
+        t('Action'),
+      )
+    );
+    $options = array();
+    foreach ($nodes as $node) {
+      $edit_url = 'admin/config/search/ytarget/' . $node->nid . '/edit';
+      $options['query'] = drupal_get_destination();
+      $edit_link = l(t('Edit'), $edit_url, $options);
+      $form['table']['#rows'][$node->nid] = array($node->title, ytarget_get_goal($node->nid), $edit_link);
+    }
+  }
+
+  return system_settings_form($form);
+}
+
+function ytarget_preprocess_webform_confirmation(&$vars) {
+  $id = variable_get('ytarget_id', '');
+  if ($id && isset($vars['node']->webform)) {
+    $nid = $vars['node']->nid;
+    ytarget_execute_goal($id, $nid);
+  }
+}
+
+function ytarget_execute_goal($id, $nid) {
+  drupal_add_js(drupal_get_path('module', 'ytarget') . '/ytarget.js');
+  $goal = ytarget_get_goal($nid);
+  $settings = array(
+    'ytargetId' => $id,
+    'ytargetGoal' => $goal,
+    'ytargetDev' => ytarget_is_dev()
+  );
+  drupal_alter('ytarget_goal', $settings, $nid);
+  drupal_add_js($settings, 'setting');
+}
+
+function ytarget_get_goal($nid) {
+  $goals = variable_get('ytarget_goals', array());
+  $goal = (string) empty($goals[$nid]) ? 'projectClientForm' . $nid : $goals[$nid];
+  return $goal;
+}
+
+function ytarget_edit_form($form, $form_state, $node) {
+  $form['nid'] = array(
+    '#type' => 'value',
+    '#value' => $node->nid
+  );
+  $form['goal'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Target ID for form %name', array('%name' => $node->title)),
+    '#default_value' => ytarget_get_goal($node->nid),
+    '#required' => TRUE
+  );
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+    '#submit' => array('ytarget_set_goal')
+  );
+  return $form;
+}
+
+function ytarget_set_goal($form, &$form_state) {
+  form_state_values_clean($form_state);
+  $nid = $form_state['values']['nid'];
+  $goal = check_plain($form_state['values']['goal']);
+  if (!empty($goal)) {
+    $goals = variable_get('ytarget_goals', array());
+    $goals[$nid] = $goal;
+    variable_set('ytarget_goals', $goals);
+    drupal_set_message(t('The target has been updated'));
+  }
+}
+
+function ytarget_is_dev() {
+  return (bool) variable_get('ytarget_dev', FALSE);
+}
+
+function ytarget_form_alter(&$form, &$form_state, $fid) {
+  if (preg_match('|^webform_client_form_(\d)*|', $fid)) {
+    if ($form['#node']->webform['redirect_url'] !== '<confirmation>') {
+      $form['#submit'][] = 'ytarget_submit_webform';
+    }
+  }
+}
+
+function ytarget_submit_webform($form, &$form_state) {
+  $id = variable_get('ytarget_id', '');
+  if ($id && isset($form_state['complete form']['#node'])) {
+    $nid = $form_state['complete form']['#node']->nid;
+    ytarget_execute_goal($id, $nid);
+    $form_state['rebuild'] = TRUE;
+  }
+}

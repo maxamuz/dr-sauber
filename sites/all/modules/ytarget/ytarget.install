@@ -1,0 +1,8 @@
+<?php
+/**
+ * implements hook_uninstall()
+ */
+
+function ytarget_uninstall(){
+	variable_del('ytarget_id');
+}

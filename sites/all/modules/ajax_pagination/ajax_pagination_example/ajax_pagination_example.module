@@ -1,0 +1,42 @@
+<?php
+
+/**
+ * @file
+ * Convert Drupal's default pagination system (theme('pager');) to use AJAX
+ * similar to a Views AJAX pager.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function ajax_pagination_example_menu() {
+  $items = array();
+
+  $items['ajax-pagination-example'] = array(
+    'title' => 'AJAX Pagination Example',
+    'page callback' => '_ajax_pagination_example_page',
+    'access arguments' => array('access content'),
+  );
+
+  return $items;
+}
+
+/**
+ * A custom page callback for the example page.
+ */
+function _ajax_pagination_example_page() {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+        ->pager();
+
+  $results = $query->execute();
+
+  $output = '';
+  if (!empty($results['node'])) {
+    foreach ($results['node'] as $nid => $node) {
+      $output .= drupal_render(node_view(node_load($nid), 'teaser'));
+    }
+  }
+
+  return $output . theme('ajax_pager', array('parameters' => array('selector' => 'block-system-main')));
+}

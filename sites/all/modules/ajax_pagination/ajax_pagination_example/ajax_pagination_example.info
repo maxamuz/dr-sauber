@@ -1,0 +1,7 @@
+name = AJAX Pagination Example
+description = Example for converting Drupal's default pagination system to AJAX
+package = AJAX
+core = 7.x
+
+dependencies[] = ajax_pagination
+dependencies[] = entity

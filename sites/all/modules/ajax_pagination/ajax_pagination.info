@@ -1,0 +1,6 @@
+name = AJAX Pagination
+description = Convert Drupal's default pagination system to AJAX
+package = AJAX
+core = 7.x
+
+scripts[] = ajax_pagination.js

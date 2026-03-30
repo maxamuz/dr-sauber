@@ -1,0 +1,1033 @@
+<?php
+
+function custom_form_alter(&$form, &$form_state, $form_id){
+  if($form['#id'] == 'webform-client-form-7--2' || $form['#id'] == 'webform-client-form-7'){
+    $form['actions']['resetbutton'] = array(
+      '#markup' => '<button class="cancel-button" type="reset" value="Отмена"/>',
+      '#weight' => 1000
+    );
+  }
+  if ($form_id == 'views_exposed_form' && $form['#id'] == 'views-exposed-form-use-block') {
+    $by_technology = variable_get('custom_direction_by_technology', get_direction_by_technology());
+    $direct_nid = arg(1);
+    if (is_numeric($direct_nid) && !empty($by_technology[$direct_nid])) {
+      $form['technology']['#options']['All'] = 'Все технологии';
+
+      foreach ($form['technology']['#options'] as $key => $value) {
+        if (is_numeric($key) && ( (!in_array($key, array_keys($by_technology[$direct_nid]))) || (in_array($key, array_keys($by_technology[$direct_nid])) && $by_technology[$direct_nid][$key] == 0) ) ) {
+          unset($form['technology']['#options'][$key]);
+        }
+      }
+    }
+  }
+  
+}
+
+
+
+/**
+ * Implements hook_cron().
+ */
+function custom_cron() {
+  
+  variable_set('custom_direction_by_technology', get_direction_by_technology());
+
+}
+
+/**
+ *
+ */
+function get_direction_by_technology() {
+  $ret = array();
+
+  $t = db_select('field_data_field_page_type', 't')->fields('t',array('entity_id'))
+       ->condition('t.field_page_type_tid', 12)->execute()->fetchCol();
+  
+  foreach($t as $tnid) {
+    $query = db_select('field_data_field_link_material', 'l')
+               ->condition('l.field_link_material_nid', $tnid)->condition('l.entity_type', 'node')
+               ->condition('l.deleted', 0);
+    $query->join('field_data_field_technology', 't', "t.entity_id = l.entity_id AND t.bundle = 'use' AND t.deleted = 0");
+    $query->addField('t', 'field_technology_nid', 'technid');
+    $query->join('node', 'n', 'n.nid = t.entity_id AND n.status = 1 ');
+    $query->addField('l', 'entity_id', 'nid');
+    
+    $query->addExpression('COUNT(l.entity_id)', 'nids_count');
+    $query->groupBy('t.field_technology_nid');
+    $result = $query->execute()->fetchAllKeyed();
+    $ret[$tnid] = $result;
+  }
+  return $ret;
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function custom_node_view($node, $view_mode, $langcode) {
+
+  //выводим ссылку на все новости
+  if($node->type == 'news'){
+
+    // проверяем, находимся ли мы на странице одного из терминов словаря "Тэги новостей"
+    ( ($term = menu_get_object('taxonomy_term', 2)) && ($term->vid == 4) ) ? $by_tag = true : $by_tag = false;
+
+    if (!$by_tag) {
+      if(isset($node->field_new_image_visible['und'][0]['value'])){
+        if($node->field_new_image_visible['und'][0]['value'] == 1){
+          unset($node->content['field_news_image']);
+        }
+      }
+      $node->content['all_news'] = array(
+          '#markup' => '<a href="/news">Посмотреть <b>все новости</b></a>',
+          '#weight' => 3,
+          '#prefix' => '<p>',
+          '#suffix' => '</p>'
+      );
+    }
+    else { //приводим к виду представления "Новости"
+      $pub_date = format_date($node->created, 'custom', 'd F Y', NULL, $langcode);
+      $img_weight = (int) $node->content['field_news_image']['#weight'];
+
+      foreach ($node->content as $key => $item) { //смещаем вес элементов, чтобы поставить дату и заголовок после картинки
+        if ( is_array($item) && (isset($item['#weight'])) && ($item['#weight'] != $img_weight) ) {
+          $node->content[$key]['#weight'] = $item['#weight'] + 2;
+        }
+        if ($key == 'body') { //обрезаем контент
+          $node->content[$key][0]['#markup'] = mb_substr(strip_tags($node->content[$key][0]['#markup']), 0, 250) . '...';
+        }
+      }
+      //добавляем дату, ...
+      $node->content['pub_date'] = array(
+        '#markup' => '<div class="pub-date">' . $pub_date . '</div>',
+        '#weight' => ++$img_weight
+      );
+
+      //...заголовок ... //см. node.tpl.php
+      $node->content['title'] = array(
+        '#markup' => '<a href="/'
+                      . drupal_get_path_alias($node->content['links']['node']['#links']['node-readmore']['href'])
+                      . '"> '
+                      . $node->title
+                      . '</a>',
+        '#weight' => $img_weight + 2,
+        '#prefix' => '<h2 class="node-title">',
+        '#suffix' => '</h2>'
+      );
+
+      //...и стрелку к "Подробнее"
+      if ($node->content['links']['node']['#links']['node-readmore']) {
+        $node->content['links']['node']['#links']['node-readmore']['title'] =
+          str_ireplace(t('Read more'), t('Read more') . ' →', $node->content['links']['node']['#links']['node-readmore']['title']);
+      }
+    }
+  }
+
+  //выводим фото до и после
+  /*
+  if($node->type == 'use'){
+    $after_before = '';
+    $node_wrapper = entity_metadata_wrapper('node', $node);
+    $before_items = $node_wrapper->field_col_photo_before->value();
+    $after_items = $node_wrapper->field_col_photo_after->value();
+    //$before_items = field_get_items('field_collection_item', $node, 'field_col_photo_before');
+    //$after_items = field_get_items('field_collection_item', $node, 'field_col_photo_after');
+
+    if(sizeof($before_items)){
+      foreach ($before_items as $before_item) {
+
+      }
+    }
+
+
+    dsm($node);
+    dsm($before_items);
+    dsm($after_items);
+    $node->content['all_news'] = array(
+        '#markup' => $after_before,
+        '#weight' => 3,
+        '#prefix' => '<div class="use-after-before">',
+        '#suffix' => '</div>'
+    );
+  }  */
+
+}
+
+function custom_field_collection_item_view($field_collection_item, $view_mode, $langcode){
+
+  //темизируем поля в ноде типа "Применение"
+  if($field_collection_item->field_name == 'field_use_before_after'){
+    if(isset($field_collection_item->content['field_photo_after'])){
+      $field_collection_item->content['field_photo_after']['#prefix'] = '<div class="field-collection-photo-wrapper field-collection-photo-wrapper-after">';
+      $field_collection_item->content['field_photo_after']['#suffix'] =
+        '<span class="after-desc">'.t("After").'</span></div>';
+    }
+    if(isset($field_collection_item->content['field_photo_before'])){
+      $field_collection_item->content['field_photo_before']['#prefix'] = '<div class="field-collection-photo-wrapper field-collection-photo-wrapper-before">';
+      $field_collection_item->content['field_photo_before']['#suffix'] =
+        '<span class="before-desc">'.t("Before").'</span></div>';
+    }
+  }
+}
+
+/**
+ * Implements hook_autodialog_commands_alter().
+ */
+function custom_autodialog_commands_alter(&$commands) {
+  $commands[0]['options']['position']['my'] = 'center';
+  $commands[0]['options']['position']['at'] = 'center';
+  $commands[0]['options']['position']['of'] = 'body';
+}
+
+/**
+ * Implements hook_menu().
+ */
+function custom_menu() {
+  
+  $items['oborudovanie-i-materialy'] = array(
+    'title' => 'Оборудования для чистки и комплектующие',
+    'page callback' => 'custom_devices_page',    
+    'access arguments' => array('access content'),
+  );
+  $items['tech/%node'] = array(
+    'title' => 'Технология',
+    'page callback' => 'custom_technology_page',    
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_node_view_alter().
+ */
+function custom_node_view_alter(&$build) {
+  
+  if($build['#node']->type == 'technology') {
+    
+    $node = $build['#node'];
+    if (!empty($node->field_technology_desc) && $node->field_technology_desc[LANGUAGE_NONE][0]['nid']) {
+      $desc_nid = $node->field_technology_desc[LANGUAGE_NONE][0]['nid'];
+      $build['body']['#suffix'] = '<div class="node-readmore">'.l('Читать подробнее', 'node/'.$desc_nid/*, array('attributes' => array('class' => array('node-readmore')))*/).'</div>';
+     
+    }
+  }
+}
+
+/**
+ *
+ */
+function custom_devices_page($term = NULL) {
+  $content_devices = $content_mats = $devices_list = $mats_list = $mat_title = '';
+  $show_mats = $show_devices = TRUE;
+
+  $breadcrumbs = array();
+  $breadcrumbs[] = l(t('Home'), '<front>'); 
+  $breadcrumbs[] = l('Оборудование и материалы', 'oborudovanie-i-materialy'); 
+  
+  //drupal_set_breadcrumb($breadcrumbs);
+  
+  if (!is_null($term) && $term->vid == 7) {    
+    $devices_tree = taxonomy_get_tree(7, $term->tid, 1);  
+    $show_mats = FALSE;    
+    module_load_include('inc', 'taxonomy', 'taxonomy.pages');
+    $build = _taxonomy_term_page($term);
+    $devices_list = render($build);    
+  } else {
+    $devices_tree = taxonomy_get_tree(7, 0, 1);  
+    if (!is_null($term) && $term->vid != 5) {
+      array_pop($breadcrumbs);
+      $breadcrumbs[] = 'Оборудование и материалы';
+    } else {
+      $mats_term = taxonomy_term_load(93);
+      $devices_tree[] = $mats_term;
+    }
+  }
+  //dsm($term);
+  if (is_null($term)) {
+    $mats_tree = taxonomy_get_tree(5, 93, 1);  
+    $mat_title = '<h2>Расходные материалы</h2>';
+  } elseif ($term->vid == 5) {    
+    $mats_tree = taxonomy_get_tree(5, $term->tid, 1); 
+    $show_devices = FALSE;
+    module_load_include('inc', 'taxonomy', 'taxonomy.pages');
+    //$build = array('header' => array('#markup' => '<h2>Расходные материалы - '.$term->name.'</h2>', '#weight' => -10));
+    $build = _taxonomy_term_page($term);
+    $mats_list = render($build);
+  }
+
+  if ($show_devices) {
+    foreach($devices_tree as $t) {    
+      $term_wrapper = entity_metadata_wrapper('taxonomy_term', $t->tid);
+
+      $childs = taxonomy_get_tree($t->vid, $t->tid, 1);
+      $sub_terms = array(); $sub_count = 0;
+      foreach($childs as $child) { 
+        $sub_count++;
+        $sub_terms[] = l($child->name, 'taxonomy/term/'.$child->tid);
+        if ($sub_count >= 3) {
+          break;
+        }
+      }    
+      
+      $img = $term_wrapper->field_device_image->value();
+      $content_devices .= '<div class="row">'.l(theme('image', array('path' => image_style_url('device_preview', $img['uri']))), 'taxonomy/term/'.$t->tid, array('html' => TRUE)). '<h2>'.l($term_wrapper->name->value(), 'taxonomy/term/'.$t->tid).'</h2>
+                '.theme('item_list', array('items' => $sub_terms)).' <div class="more">'.l('Подробнее', 'taxonomy/term/'.$t->tid).'</div></div>';
+
+    }
+    if ($content_devices) {
+      $content_devices = '<div class="devices-wrapper">'.$content_devices.'</div>';
+    }
+  }  
+
+  if ($show_mats) {
+    foreach($mats_tree as $t) {
+      $term_wrapper = entity_metadata_wrapper('taxonomy_term', $t->tid);
+
+      $childs = taxonomy_get_tree(5, $t->tid, 1);
+      $sub_terms = array();    
+      foreach($childs as $child) {
+        $sub_terms[] = l($child->name, 'taxonomy/term/'.$child->tid);
+      }    
+      $sub_terms_content = "";
+      if ($sub_terms) {
+        $arr = array_chunk($sub_terms, round(count($sub_terms)/2));  
+      }    
+      if (!empty($arr) && count($arr) > 0) {
+         $sub_terms_content .= '<div class="column">'.theme('item_list', array('items' => $arr[0])).'</div>';
+      }
+      if (!empty($arr) && count($arr) == 2) {
+         $sub_terms_content .= '<div class="column">'.theme('item_list', array('items' => $arr[1])).'</div>';
+      }
+      $img = $term_wrapper->field_device_image->value();
+      $content_mats .= '<div class="row"><div class="image-wrapper">'.theme('image', array('path' => image_style_url('preview_materials', $img['uri']))). '</div><div class="category-wrapper"><h2>'.$term_wrapper->name->value().'</h2>'.$sub_terms_content .'
+       <div class="more">'.l('Ещё', 'taxonomy/term/'.$t->tid).'</div></div></div>';
+    }
+    if ($content_mats) {
+      $content_mats = '<div class="mats-wrapper">'.$mat_title.$content_mats.'</div>';
+    }
+  }  
+
+  if (!is_null($term)) {
+    $breadcrumb = array();  
+    // Build breadcrumb based on the hierarchy of the term.
+    $current = (object) array(
+      'tid' => $term->tid,
+    );
+    while ($parents = taxonomy_get_parents($current->tid)) { 
+      $current = array_shift($parents);
+      $breadcrumb[] = l($current->name, 'taxonomy/term/' . $current->tid);
+    }
+    //$breadcrumb = array_reverse($breadcrumb);
+    $breadcrumbs = array_merge($breadcrumbs, array_reverse($breadcrumb)); 
+    $breadcrumbs[] = $term->name;
+  }  
+  
+  drupal_set_breadcrumb($breadcrumbs); 
+
+  return $content_devices . $devices_list . $content_mats . $mats_list;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function custom_menu_alter(&$items) {
+  // Example - disable the page at node/add
+  /*
+   *$items['node/add']['access callback'] = FALSE;
+   */
+  /* Your code here */
+  $items['taxonomy/term/%taxonomy_term']['page callback'] = 'custom_taxonomy_term_page';
+}
+
+/**
+ *
+ */
+function custom_taxonomy_term_page($term) {  
+
+  if ($term->vid != 5 && $term->vid != 7) {  
+
+    module_load_include('inc','taxonomy', 'taxonomy.pages');
+    return _taxonomy_term_page($term);  
+  } else {
+    return custom_devices_page($term);
+  }
+}
+
+/**
+ *
+ */
+function _taxonomy_term_page($term) {
+
+  // If there is a menu link to this term, the link becomes the last part of
+  // the active trail, and the link name becomes the page title. Thus, we must
+  // explicitly set the page title to be the term title.
+  drupal_set_title($term->name);
+
+  // Build breadcrumb based on the hierarchy of the term.
+  $current = (object) array(
+    'tid' => $term->tid,
+  );
+
+  // @todo This overrides any other possible breadcrumb and is a pure hard-coded
+  //   presumption. Make this behavior configurable per vocabulary or term.
+
+  // Build breadcrumb based on the hierarchy of the term.
+  $current = (object) array(
+    'tid' => $term->tid,
+  );
+
+  // @todo This overrides any other possible breadcrumb and is a pure hard-coded
+  //   presumption. Make this behavior configurable per vocabulary or term.
+  $breadcrumb = array();
+  while ($parents = taxonomy_get_parents($current->tid)) {
+    $current = array_shift($parents);
+    $breadcrumb[] = l($current->name, 'taxonomy/term/' . $current->tid);
+  }
+  $breadcrumb[] = l(t('Home'), NULL);
+  $breadcrumb = array_reverse($breadcrumb); //dsm($breadcrumb);
+  drupal_set_breadcrumb($breadcrumb);
+  
+  //drupal_add_feed('taxonomy/term/' . $term->tid . '/feed', 'RSS - ' . $term->name);
+
+  // Set the term path as the canonical URL to prevent duplicate content.
+  $uri = entity_uri('taxonomy_term', $term);
+  drupal_add_html_head_link(array(
+    'rel' => 'canonical',
+    'href' => url($uri['path'], $uri['options']),
+  ), TRUE);
+
+  // Set the non-aliased path as a default shortlink.
+  drupal_add_html_head_link(array(
+    'rel' => 'shortlink',
+    'href' => url($uri['path'], array_merge($uri['options'], array(
+      'alias' => TRUE,
+    ))),
+  ), TRUE);
+
+  // Normally we would call taxonomy_term_show() here, but for backwards
+  // compatibility in Drupal 7 we do not want to do that (it produces different
+  // data structures and HTML markup than what Drupal 7 released with). Calling
+  // taxonomy_term_view() directly provides essentially the same thing, but
+  // allows us to wrap the rendered term in our desired array structure.
+  $build['term_heading'] = array(
+    '#prefix' => '<div class="term-listing-heading">',
+    '#suffix' => '</div>',
+    'term' => taxonomy_term_view($term, 'full'),
+  );
+
+  $tids = array();
+  custom_taxonomy_get_children($term->tid, $tids);
+  /*$tids = taxonomy_get_children($term->tid);
+  $tids = array_keys($tids);
+  $tids[] = (int)$term->tid;
+  */
+  
+  $query = db_select('taxonomy_index', 'i')->extend('PagerDefault');  
+  $query->leftJoin('node', 'n', ' n.nid = i.nid AND n.status = 1 ');
+  $query->fields('i', array('nid'))->condition('i.tid', $tids, 'IN'); 
+  $query->groupBy('i.nid');
+  $query->orderBy('n.created', 'DESC');
+  $query->limit(20)->addTag('node_access'); //dsm($query->__toString());
+
+  $nids = $query->execute()->fetchCol(); //dsm($nids);
+  if ($nids) {
+    $nodes = node_load_multiple($nids);
+    $build += node_view_multiple($nodes);
+    $build['pager'] = array(
+      '#theme' => 'pager',
+      '#weight' => 5,
+    );
+  }
+ /* else {
+    $build['no_content'] = array(
+      '#prefix' => '<p>',
+      '#markup' => t('There is currently no content classified with this term.'),
+      '#suffix' => '</p>',
+    );
+  }*/
+  return $build;
+}
+
+/**
+ *
+ */
+function custom_taxonomy_get_children($tid, &$tids) {
+	$child_tids = taxonomy_get_children($tid);      
+	$child_tids = array_keys($child_tids);
+	$child_tids[] = (int)$tid;
+	foreach($child_tids as $child_tid) {
+		if ($child_tid && !in_array($child_tid, $tids)) {
+			$tids[] = $child_tid;
+			custom_taxonomy_get_children($child_tid, $tids);
+		}		
+	}	
+	return;
+}
+
+
+/**
+ *
+ */
+function custom_technology_page($node) {
+  drupal_set_title($node->title);
+  $content = '';
+
+  // $breadcrumbs = array();
+  // $breadcrumbs[] = l(t('Home'), '<front>'); 
+  // $breadcrumbs[] = l('Промышленный клининг', 'node/106'); 
+  // $breadcrumbs[] = $node->title; 
+  // drupal_set_breadcrumb($breadcrumbs);
+  
+  $view = node_view($node, 'teaser');
+  if (!empty($node->field_technology_desc) && $node->field_technology_desc[LANGUAGE_NONE][0]['nid']) {
+    $desc_nid = $node->field_technology_desc[LANGUAGE_NONE][0]['nid'];
+    $view['links']['node']['#links']['node-readmore']['href'] = 'node/'.$desc_nid;
+  }
+  $content .= render($view);
+
+  return  $content;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function custom_block_info() {
+
+  $blocks['custom_prod_for_technolnogy'] = array(
+    'info' => t('Категории товаров для технологии'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_devices_for_technolnogy'] = array(
+    'info' => t('Категории оборудования для технологии'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_menu_for_technolnogy'] = array(
+    'info' => t('Сферы применения для технологии'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_technology_video'] = array(
+    'info' => t('Видео для старницы технологии'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_mats_devices_for_front'] = array(
+    'info' => t('Оборудование и товары для главной'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_mats_devices_root'] = array(
+    'info' => t('Оборудование и товары корневой список'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_recomended_devices'] = array(
+    'info' => t('Рекомендованное оборудование'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_recomended_products'] = array(
+    'info' => t('Рекомендованные товары'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+
+  $blocks['custom_search_block'] = array(
+    'info' => t('Search form').' - '.t('Search API'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+  $blocks['custom_info_for_technolnogy'] = array(
+    'info' => t('Дополнительная информация для технологии'),
+    'cache' => DRUPAL_NO_CACHE
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function custom_block_view($delta = '', $p = 0) {
+  $block = array();
+
+  switch ($delta) {
+
+    case 'custom_prod_for_technolnogy':
+
+      if (count(arg()) == 2 && arg(0) == 'node') {
+        $nid = arg(1);
+        $node = node_load($nid);
+        if ($node->type == 'technology') {
+          $block['subject'] = t('Продукция');    
+
+          $query = db_select('field_data_field_technology', 'ft')->condition('ft.bundle', "product")->condition('field_technology_nid', $node->nid)->distinct();
+          $query->leftJoin('taxonomy_index', 'i', ' i.nid = ft.entity_id');
+          $query->leftJoin('taxonomy_term_data', 't', ' i.tid = t.tid');
+          $query->condition('t.vid', 5);
+          $query->addField('t','tid', 'tid');          
+          $tids = $query->execute()->fetchCol();
+
+          $mats_tree = taxonomy_get_tree(5, 93);
+          $needed_cats = array();
+          foreach($mats_tree as $t) {
+            if (in_array($t->tid, $tids)) {
+              // та категория
+              if ($t->parents[0] != 93 && !in_array($t->parents[0], array_keys($needed_cats))) {
+                $needed_cats[$t->parents[0]] = taxonomy_term_load($t->parents[0]);
+              }
+            }
+          }
+          
+          if ($needed_cats) {
+            $content_mats = '';
+            foreach($needed_cats as $t) {
+              $term_wrapper = entity_metadata_wrapper('taxonomy_term', $t->tid);
+
+              $childs = taxonomy_get_tree(5, $t->tid, 1);
+              $sub_terms = array();    
+              foreach($childs as $child) {
+                $sub_terms[] = l($child->name, 'taxonomy/term/'.$child->tid);
+              }    
+              $sub_terms_content = "";
+              if ($sub_terms) {
+                $arr = array_chunk($sub_terms, round(count($sub_terms)/2));  
+              }    
+              if (!empty($arr) && count($arr) > 0) {
+                 $sub_terms_content .= '<div class="column">'.theme('item_list', array('items' => $arr[0])).'</div>';
+              }
+              if (!empty($arr) && count($arr) == 2) {
+                 $sub_terms_content .= '<div class="column">'.theme('item_list', array('items' => $arr[1])).'</div>';
+              }
+              $img = $term_wrapper->field_device_image->value();
+              $content_mats .= '<div class="row"><div class="image-wrapper">'.theme('image', array('path' => image_style_url('preview_materials', $img['uri']))). '</div><div class="category-wrapper"><h2>'.$term_wrapper->name->value().'</h2>'.$sub_terms_content .'
+               <div class="more">'.l('Ещё', 'taxonomy/term/'.$t->tid).'</div></div></div>';
+            }
+            if ($content_mats) {
+              $content_mats = '<div class="mats-wrapper">'.$content_mats.'</div>';
+            }
+            $block['content'] = $content_mats;
+          }
+          
+        }
+      }
+      
+      break;
+
+    case 'custom_devices_for_technolnogy':
+
+        if (count(arg()) == 2 && arg(0) == 'node') {
+          $nid = arg(1);
+          $nw = entity_metadata_wrapper('node', $nid);
+          if ($nw->type->value() == 'technology') {
+          	$block['subject'] = t('Оборудование');
+          	if ($nw->field_title_for_devices_block->value()) {
+          		$block['subject'] = $nw->field_title_for_devices_block->value();
+          	}
+            $query = db_select('field_data_field_technology', 'ft')->condition('ft.bundle', "device")->condition('field_technology_nid', $nw->nid->value())->distinct();
+            $query->leftJoin('taxonomy_index', 'i', ' i.nid = ft.entity_id');
+            $query->leftJoin('taxonomy_term_data', 't', ' i.tid = t.tid');
+            $query->condition('t.vid', 7);
+            $query->addField('t','tid', 'tid');          
+            $tids = $query->execute()->fetchCol();
+
+            $device_tree = taxonomy_get_tree(7, 0);
+            $needed_cats = array();
+            foreach($device_tree as $t) {
+              if (in_array($t->tid, $tids)) {
+                // та категория
+                if ($t->parents[0] && !in_array($t->parents[0], $needed_cats)) {
+                  $needed_cats[] = $t->parents[0];
+                }
+              }
+            }
+            
+            $content_devices = '';
+            
+            /*if (count($needed_cats)>1) {
+              foreach($needed_cats as $tid) {  
+              	if (!empty($tid) && is_numeric($tid)) {
+              		$term_wrapper = entity_metadata_wrapper('taxonomy_term', $tid);
+
+	                $childs = taxonomy_get_tree($term_wrapper->value()->vid, $tid, 1);
+	                $sub_terms = array(); $sub_count = 0;
+	                foreach($childs as $child) { 
+	                  $sub_count++;
+	                  $sub_terms[] = l($child->name, 'taxonomy/term/'.$child->tid);
+	                  if ($sub_count >= 3) {
+	                    break;
+	                  }
+	                }    
+	                
+	                $img = $term_wrapper->field_device_image->value();
+	                $content_devices .= '<div class="row">'.l(theme('image', array('path' => image_style_url('device_preview', $img['uri']))), 'taxonomy/term/'.$tid, array('html' => TRUE)). '<h2>'.l($term_wrapper->name->value(), 'taxonomy/term/'.$tid).'</h2>
+	                '.theme('item_list', array('items' => $sub_terms)).' <div class="more">'.l('Подробнее', 'taxonomy/term/'.$tid).'</div></div>';
+              	}
+              }
+              if ($content_devices) {
+                $content_devices = '<div class="devices-wrapper">'.$content_devices.'</div>';
+              }
+              $block['content'] = $content_devices;
+            } else*/if(count($needed_cats)>0) {
+
+              $limit = 10;
+
+              $devices = db_select('field_data_field_technology', 't')->fields('t', array('entity_id'))
+                          ->extend('PagerDefault')->condition('t.bundle', 'device')
+                          ->condition('t.field_technology_nid', $nid)->limit($limit)
+                          ->execute()->fetchCol();
+              //dsm($devices);
+              $tids = array();
+              custom_taxonomy_get_children($needed_cats[0], $tids);
+
+              $build = array();
+              if ($devices) {
+                $nodes = node_load_multiple($devices);
+                $build += node_view_multiple($nodes);
+                $build['pager'] = array(
+                  '#theme' => 'ajax_pager',
+                  '#weight' => 5,
+                  '#parameters' => array('selector' => "block-custom-custom-devices-for-technolnogy", 'callback' => 'custom_devices_for_technolnogy')
+                );
+                $block['content'] = render($build);
+              }
+            }
+          }
+        }
+      break;
+
+    case 'custom_info_for_technolnogy':
+        if (count(arg()) == 2 && arg(0) == 'node') {
+          $nid = arg(1);
+          $nw = entity_metadata_wrapper('node', $nid);
+          if ($nw->type->value() == 'technology') {
+            $block['subject'] = t('Дополнительная информация');
+            if ($nw->field_title_for_technology_info->value()) {
+              $block['subject'] = $nw->field_title_for_technology_info->value();
+            }
+            if ($nw->field_technology_dop_info->value()) {
+              $info = $nw->field_technology_dop_info->value();
+              $block['content'] = '';
+              $labels = array();
+              $content = array();
+              foreach($info as $key => $col) { 
+                $labels[] = '<span infoblock="'.$key.'">'.$nw->field_technology_dop_info[$key]->field_technology_dop_tab_title->value().'</span>';
+                $content[] = '<div class="info-data info-data-'.$key.'">'.$nw->field_technology_dop_info[$key]->field_technology_dop_tab_data->value()['value'].'</div>';
+              }
+              if ($labels && $content) {
+                $block['content'] .= '<div class="info-block"><div class="info-tabs">'.implode('', $labels).'</div>'.
+                implode('', $content).'</div>';
+              }
+            }
+          }
+        }
+        break;
+
+    case 'custom_menu_for_technolnogy':
+        $block['subject'] = 'В каких сферах применим';
+
+        $nid = arg(1);
+        $node = node_load($nid);
+        if ($node->type == 'technology' /*|| arg(0) == 'technology'*/) {
+          $query = db_select('field_data_field_technology', 'ft')->condition('ft.bundle', 'use')->condition('field_technology_nid', $node->nid);
+          $query->leftJoin('field_data_field_link_material', 'fm', " fm.bundle = 'use' AND fm.entity_id = ft.entity_id");
+          $query->addField('fm','field_link_material_nid', 'nid');
+          $query->groupBy('fm.field_link_material_nid');
+          $nids = $query->execute()->fetchCol();          
+          $paths = array();
+          foreach ($nids as $nid) {
+            $paths[] = 'node/'.$nid;
+          }
+          
+          $mt = menu_tree('menu-application');
+          foreach($mt as $mid => $m) {
+            if (is_numeric($mid) && !in_array($m['#href'], $paths)) {
+              unset($mt[$mid]);
+            }
+          }
+          $block['content'] = $mt;
+        }
+
+      break;
+    
+    case 'custom_technology_video':
+
+        $args = arg();
+        if ($args[0] == 'node' && is_numeric($args[1])) {
+          $node = node_load($args[1]);
+          if ($node->type == 'technology') {
+            $node_view = node_view($node); //dsm($node_view['field_technology_video']);
+            // $node_view['field_technology_video']['#items'][0]['title'] = $node->title;
+            $node_view['field_technology_video'][0]['file']['#options']['attributes']['title'] = $node->title;
+            $block['content'] = render($node_view['field_technology_video']);
+          }
+        }
+      break;
+
+    case 'custom_mats_devices_for_front':
+
+        $block['title'] = "Оборудование и материалы Best in sales";
+
+        $items = array();
+
+        $device_tree = taxonomy_get_tree(7, 0, 1);
+        $mats_tree = taxonomy_get_tree(5, 0, 1);
+        $device_tree = array_merge($device_tree, $mats_tree);
+        $limit = 4; $i = 1;
+        foreach($device_tree as $t) {
+          $tw = entity_metadata_wrapper('taxonomy_term', $t->tid);
+          $img = $tw->field_device_image->value();
+          
+          $items[] = l(theme('image_style', array('style_name' => 'dev_and_mats_front', 'path' => $img['uri'])), 'taxonomy/term/'.$t->tid, array('html' => TRUE)).
+          '<h3>'.l($t->name, 'taxonomy/term/'.$t->tid, array('html' => TRUE)).'</h3>';
+          $i++;
+          if ($i > $limit)
+          	break;
+        }
+
+        
+        // $twm = entity_metadata_wrapper('taxonomy_term', $mats_tree[0]->tid);
+        // dsm($twm->value());
+
+        if ($items) {
+          $block['content'] = theme('item_list', array('items' => $items));
+        }
+
+      break;
+
+    case 'custom_mats_devices_root':
+
+      $block['content'] = custom_devices_page();
+
+      break;
+
+    case 'custom_recomended_devices':
+
+      $nid = arg(1);
+      $output = '';
+      if (arg(0) == 'node' && is_numeric($nid)) {
+        $nw = entity_metadata_wrapper('node', $nid);
+        if ($nw->type->value() == 'device') {
+          if ($nw->field_recomened_devices->value()) {
+            
+            foreach($nw->field_recomened_devices->value() as $rec_node) {
+              if (is_null($rec_node)) {
+                continue;
+              }
+              $node_view = node_view($rec_node, 'teaser');
+              $output .= drupal_render($node_view);
+            }
+          } else {
+            $vb = module_invoke('views', 'block_view', 'product_recommend-block_1');
+            $output = $vb['content'];
+          }
+        }
+      }
+      $block['title'] = 'Рекомендуем к товару';
+      $block['content'] = $output;
+
+      break;
+
+    case 'custom_recomended_products':
+
+      $nid = arg(1);
+      $output = '';
+      if (arg(0) == 'node' && is_numeric($nid)) {
+        $nw = entity_metadata_wrapper('node', $nid);
+        if ($nw->type->value() == 'product') {
+          if ($nw->field_recomened_products->value()) {
+            $even = 1;
+            foreach($nw->field_recomened_products->value() as $rec_node) { 
+              if (is_null($rec_node)) {
+                continue;
+              }
+              $node_view = node_view($rec_node, 'teaser');
+              if ($even % 2 == 0) {
+                $output .= '<div class="views-row views-row-even">'.drupal_render($node_view).'</div>';
+              } else {
+                $output .= '<div class="views-row views-row-odd">'.drupal_render($node_view).'</div>';
+              }
+              $even++;
+            }
+          } else {
+            $vb = module_invoke('views', 'block_view', 'product_recommend-block');
+            $output = $vb['content'];
+          }
+        }
+      }
+
+      $block['title'] = 'Рекомендуем к товару';
+      $block['content'] = $output; 
+
+      break;
+
+    case 'custom_search_block':
+
+      $block['header'] = t('Search');
+      $block['content'] = drupal_get_form('custom_search_form');
+
+      break;
+  }
+  return $block;
+}
+
+/**
+ * Implements hook_block_view_alter().
+ */
+function custom_block_view_alter(&$data, $block) { 
+  $args = arg(); 
+  
+  if ($block->module == 'views' && $block->delta == 'use-block_1' && $args[0] == 'node' && is_numeric($args[1])) {  	
+  	$nw = entity_metadata_wrapper('node', $args[1]); 
+  	if ($nw->type->value() == 'technology' && $nw->field_title_for_use_block->value()) {
+  		$data['subject'] = $nw->field_title_for_use_block->value();
+  	}
+  }
+}
+
+/**
+ *
+ */
+function custom_search_form($form, &$form_state) {
+
+  $form['text'] = array(
+    '#type' => 'textfield',
+    '#default_value' => '',
+    '#size' => 40,
+    '#maxlength' => 255,
+    '#required' => TRUE,
+    '#attributes' => array(
+      'placeholder' => 'Поиск'
+     ),
+    '#prefix' => '<div class="container-inline">',
+  );
+
+  $form['#attributes']['class'][] = 'hidden-form';
+  $form['actions'] = array(
+    '#type' => 'actions',
+    '#suffix' => '</div>',
+  );
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Search'),
+  );
+
+  return $form;
+}
+
+/**
+ *
+ */
+function custom_search_form_validate($form, &$form_state) {
+  if (strlen($form_state['values']['text']) < 2) {
+    form_set_error('text', 'Для поиска необходимо ввести хотя бы 2 буквы.');
+  }
+}
+
+/**
+ *
+ */
+function custom_search_form_submit($form, &$form_state) {
+  if (!form_get_errors()) {
+    drupal_goto('search', array('query' => array('search_phrase' => $form_state['values']['text'])));
+  }
+}
+
+/**
+ *
+ */
+function custom_devices_for_technolnogy($url = '', $p = 0) {
+
+  $output = '';
+  $args  = explode("/", $url);
+
+  if (count($args) == 2 && $args[0] == 'node') {
+    $nid = $args[1];
+    $nw = entity_metadata_wrapper('node', $nid);
+
+    if ($nw->type->value() == 'technology') {
+      $block['subject'] = t('Оборудование');
+      if ($nw->field_title_for_devices_block->value()) {
+        $block['subject'] = $nw->field_title_for_devices_block->value();
+      }
+      $query = db_select('field_data_field_technology', 'ft')->condition('ft.bundle', "device")->condition('field_technology_nid', $nw->nid->value())->distinct();
+      $query->leftJoin('taxonomy_index', 'i', ' i.nid = ft.entity_id');
+      $query->leftJoin('taxonomy_term_data', 't', ' i.tid = t.tid');
+      $query->condition('t.vid', 7);
+      $query->addField('t','tid', 'tid');          
+      $tids = $query->execute()->fetchCol();
+
+      $device_tree = taxonomy_get_tree(7, 0);
+      $needed_cats = array();
+      foreach($device_tree as $t) {
+        if (in_array($t->tid, $tids)) {
+          // та категория
+          if ($t->parents[0] && !in_array($t->parents[0], $needed_cats)) {
+            $needed_cats[] = $t->parents[0];
+          }
+        }
+      }
+
+      $content_devices = '';
+      
+     if(count($needed_cats)>0) {
+
+        $limit = 10;
+
+        $devices = db_select('field_data_field_technology', 't')->fields('t', array('entity_id'))
+                    ->extend('PagerDefault')->condition('t.bundle', 'device')
+                    ->condition('t.field_technology_nid', $nid)->limit($limit)
+                    ->execute()->fetchCol();
+        //dsm($devices);
+        $tids = array();
+        custom_taxonomy_get_children($needed_cats[0], $tids);
+
+        $build = array();
+        if ($devices) {
+          $nodes = node_load_multiple($devices);
+          $build += node_view_multiple($nodes);
+          $build['pager'] = array(
+            '#theme' => 'ajax_pager',
+            '#weight' => 5,
+            '#parameters' => array('selector' => "block-custom-custom-devices-for-technolnogy", 'callback' => 'custom_block_view')
+          );
+          $output = render($build);
+        }
+        if ($output != '') {
+          $output = '<h2>Оборудование, системы очистки сухим льдом и снегом.</h2><div class="content">'.$output.'</div>';
+        }
+      }
+    }
+  }
+
+  return $output;
+}
+
+/***************************************************************************
+ * Color box styling
+ */
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function custom_form_colorbox_admin_settings_alter(&$form, &$form_state) {
+  $path = drupal_get_path('module', 'custom') . '/colorbox/styles/drsauber';
+  
+  // Убираем из селекта вариант "None". Потом мы его вернем в самый конец, чтобы
+  // форма имела эстетический вид.
+  unset($form['colorbox_custom_settings']['colorbox_style']['#options']['none']);
+
+  // Добавляем в селект свой стиль.
+  $form['colorbox_custom_settings']['colorbox_style']['#options'][$path] = t('Dr-sauber');
+
+  // Возвращаем в селект вариант "None".
+  $form['colorbox_custom_settings']['colorbox_style']['#options']['none'] = t('None');
+}
+
+/**
+ * Implements hook_colorbox_settings_alter().
+ */
+function custom_colorbox_settings_alter(&$settings, &$style) {
+  if ($style == drupal_get_path('module', 'custom') . '/colorbox/styles/drsauber') {
+    drupal_add_js($style . '/colorbox_style.js');
+    drupal_add_css($style . '/colorbox_style.css');
+    
+    // Мы можем альтернуть настройки колорбокса.
+    $settings['fixed'] = FALSE;
+    //$settings['reposition'] = FALSE;
+  }
+}

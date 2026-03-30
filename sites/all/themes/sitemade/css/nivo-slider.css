@@ -1,0 +1,29 @@
+.nivoSlider{position:relative;width:949px;margin:0 auto;height:262px;}
+.nivoSlider img{position:absolute;top:0px;left:0px;max-width:none;}
+.nivo-main-image{display:block !important;position:relative !important;width:100% !important;}
+.nivoSlider a.nivo-imageLink{position:absolute;top:0px;left:0px;width:100%;height:100%;border:0;padding:0;margin:0;z-index:6;display:none;background:white;filter:alpha(opacity=0);opacity:0;}
+.nivo-slice{display:block;position:absolute;z-index:5;height:100%;top:0;}
+.nivo-box{display:block;position:absolute;z-index:5;overflow:hidden;}
+.nivo-box img{display:block;}
+.nivo-caption{position:absolute;left:0;bottom:-17px;color:#747272;text-transform:uppercase;width:100%;z-index:8;padding:5px 10px;overflow:hidden;display:none;-webkit-box-sizing:border-box;-moz-box-sizing:border-box;box-sizing:border-box;z-index:999;text-align:center;font-weight:600;}
+.nivo-caption p{padding:5px;margin:0;}
+.nivo-caption a{display:inline !important;}
+.nivo-html-caption{display:none;}
+.nivo-directionNav a{position:absolute;top:45%;z-index:9;cursor:pointer;}
+.nivo-prevNav{left:0px;}
+.nivo-nextNav{right:0px;}
+.nivo-controlNav{text-align:center;width:1017px;margin:35px auto 15px auto;}
+.nivo-controlNav a{display:block;float:left;cursor:pointer;width:97px;height:127px;margin:0 8px;text-transform:uppercase;font-size:10px;font-weight:600;}
+.nivo-controlNav a:hover{text-decoration:none;}
+.nivo-controlNav a div{width:97px;height:97px;margin-bottom:14px;-webkit-box-shadow:1px 1px 5px 0px rgba(50, 50, 50, 0.65);-moz-box-shadow:1px 1px 5px 0px rgba(50, 50, 50, 0.65);box-shadow:1px 1px 5px 0px rgba(50, 50, 50, 0.65);}
+.nivo-controlNav a:hover div, .nivo-controlNav a.active div{-webkit-box-shadow:0px 5px 30px 0px rgba(50, 50, 50, 1);-moz-box-shadow:0px 5px 30px 0px rgba(50, 50, 50, 1);box-shadow:0px 5px 30px 0px rgba(50, 50, 50, 1);}
+.nivo-controlNav a.active{}
+.nivo-controlNav a#x0 div{background:url(../img/itm1.gif);}
+.nivo-controlNav a#x1 div{background:url(../img/itm2.gif);}
+.nivo-controlNav a#x2 div{background:url(../img/itm3.gif);}
+.nivo-controlNav a#x3 div{background:url(../img/itm4.gif);}
+.nivo-controlNav a#x4 div{background:url(../img/itm5.gif);}
+.nivo-controlNav a#x5 div{background:url(../img/itm6.gif);}
+.nivo-controlNav a#x6 div{background:url(../img/itm7.gif);}
+.nivo-controlNav a#x7 div{background:url(../img/itm8.gif);}
+.nivo-controlNav a#x8 div{background:url(../img/itm9.gif);}

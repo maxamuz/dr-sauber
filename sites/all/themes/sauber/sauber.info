@@ -1,0 +1,19 @@
+name = dr-sauber
+description = Темя для сайта dr-sauber
+package = Core
+version = VERSION
+core = 7.x
+
+stylesheets[all][] = less/style.less
+stylesheets[all][] = css/owl.carousel.css
+
+scripts[] = js/sauber.js
+;scripts[] = js/jquery.jcarousel.min.js
+scripts[] = js/owl.carousel.min.js
+;scripts[] = js/vacancy.js
+
+regions[header] = Header
+regions[left] = Left
+regions[slider] = Slider
+regions[content] = Content
+regions[footer] = Footer 

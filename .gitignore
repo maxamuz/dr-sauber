@@ -1,0 +1,36 @@
+# Ignore configuration files that may contain sensitive information.
+sites/*/settings*.php
+
+# Ignore paths that contain user-generated content.
+sites/*/files
+sites/*/private
+sites/all/libraries/facebook-php-sdk-v4/
+cache/normal/dr-sauber.loc
+
+# IDE
+.idea/
+
+# Server specific
+.cursor-server/
+.osp
+tmp/
+presentation/
+
+# Compressed files
+*.gz
+
+# Personal and system files (локальные, не должны в репозитории)
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.gitconfig
+.mysql_history
+.wget-hsts
+
+# Cache and config directories
+.cache/
+.config/
+.local/
+.ssh/
+EOF

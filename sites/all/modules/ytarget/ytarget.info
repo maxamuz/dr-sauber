@@ -1,0 +1,14 @@
+name = Yandex.Metrika targeting
+description=Easy set targeting to webforms
+core=7.x
+package=SEO
+
+dependecies[] = webform
+
+
+; Information added by Drupal.org packaging script on 2017-08-18
+version = "7.x-1.1"
+core = "7.x"
+project = "ytarget"
+datestamp = "1503056045"
+

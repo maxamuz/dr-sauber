@@ -1,0 +1,126 @@
+<?php
+
+/**
+ * Implements hook_block_view().
+ * Генерация заголовка блока и его контента. Блок для футера с верхними терминами меню
+ */
+function sauber_search_page_alter(&$page){
+  ctools_include('modal');
+  ctools_modal_add_js();
+
+  $catalog_style = array(
+  'catalog-style' => array(
+    'modalSize' => array(
+      'type' => 'scale', // Тип модального окна. фиксированный или резиновый.
+      'width' => 1, // Ширина модального окна.
+      'height' => 'auto', // Высота модального окна.
+    ),
+    'modalOptions' => array(
+      'opacity' => (int) 1, // Прозрачность фона.
+      'background-color' => '#fff', // Цвет фона.
+      'top' => 50,
+    ),
+    'modalTheme' => 'sauber_search',
+    'closeText' => '', // Текст для закрытия модального окна.
+    'loadingText' => '', // Текст, отображаемый в момент загрузки модального окна.
+    'animation' => 'fadeIn', // Эффект появления модального окна.
+    'animationSpeed' => 'fast', // Скорость анимации.
+    ),
+  );
+
+  // Подключаем настройки для модального окна.
+  drupal_add_js($catalog_style, 'setting');
+}
+
+
+/**
+ * Implements hook_menu().
+ */
+function sauber_search_menu() {
+  $items = array();
+
+  $items['ctmodal/%ctools_js/search'] = array(
+    'page callback' => 'sauber_ajax_search_callback',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Ajax search callback.
+ */
+function sauber_ajax_search_callback($ajax) {
+  if ($ajax) {
+    ctools_include('ajax');
+    ctools_include('modal');
+
+    $form_state = array(
+      'ajax' => TRUE,
+      'title' => t('Search'),
+    );
+
+    // Use ctools to generate ajax instructions for the browser to create
+    // a form in a modal popup.
+    //$output = ctools_modal_form_wrapper('search_block_form', $form_state);
+    $output = ctools_modal_form_wrapper('sauber_search_form', $form_state);
+
+    // If the form has been submitted, there may be additional instructions
+    // such as dismissing the modal popup.
+    if (!empty($form_state['ajax_commands'])) {
+      $output = $form_state['ajax_commands'];
+    }
+
+    // Return the ajax instructions to the browser via ajax_render().
+    print ajax_render($output);
+    drupal_exit();
+  }
+  else {
+    //return drupal_get_form('search_block_form');
+    return drupal_get_form('sauber_search_form');
+  }
+}   
+
+/**
+ * Drupal form to be put in a modal.
+ */
+function sauber_search_form($form, $form_state) {
+  $form = array();
+
+  $form['search_keys'] = array(
+    '#type' => 'textfield',
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Search'),
+  );
+
+  return $form;
+}  
+
+function sauber_search_form_alter(&$form, &$form_state, $form_id) {
+  
+  if($form_id == 'sauber_search_form'){
+    $form['search_keys']['#attributes']['placeholder'] = 'Поиск по сайту';
+  }
+  if ($form_id == 'search_block_form') {    
+    $form['search_block_form']['#attributes']['placeholder'] = t('Search');
+  }
+}
+
+/**
+ * Drupal form submit handler.
+ */
+function sauber_search_form_submit(&$form, &$form_state) {
+
+  $is_search = $form_state['values']['search_keys'];
+  $options = array();
+  if($is_search != ''){
+    $form_state['ajax_commands'][] = ctools_ajax_command_redirect('search/node/'.$is_search, $delay = 0);
+  }
+  else{
+    $form_state['ajax_commands'][] = ajax_command_alert("Пожалуйста, введите ключевые слова");
+  }
+}
